@@ -142,7 +142,6 @@ class ChatWindow(QMainWindow):
     def _scroll_to_bottom(self):
         self.chat_history.ensureCursorVisible()
 
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = ChatWindow()
