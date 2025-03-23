@@ -260,6 +260,7 @@ class ChatWindow(QMainWindow):
         user = query
         return system, user
 
+
     @threaded
     def generate_answer(self, query: str):
         system, user_template = self.prompt_manager.get_current_prompt()
