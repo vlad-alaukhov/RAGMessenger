@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2bab6b68-6783-46c9-a5ca-4dd97c44bf02" name="Changes" comment="Rag Messenger" />
+    <list default="true" id="2bab6b68-6783-46c9-a5ca-4dd97c44bf02" name="Changes" comment="Rag Messenger">
+      <change afterPath="$PROJECT_DIR$/rag_prompts.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rag_messenger.py" beforeDir="false" afterPath="$PROJECT_DIR$/rag_messenger.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -20,21 +24,21 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "vlad-alaukhov"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;vlad-alaukhov&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/vlad-alaukhov/RAGMessenger.git",
-    "accountId": "8127a0b6-e846-4bb2-92d0-68465bff558d"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/vlad-alaukhov/RAGMessenger.git&quot;,
+    &quot;accountId&quot;: &quot;8127a0b6-e846-4bb2-92d0-68465bff558d&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 7
-}]]></component>
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 7
+}</component>
   <component name="ProjectId" id="2ufbvFDFVK0MCxlDYM6D8XBD4FB" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
@@ -44,8 +48,11 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "Python.rag_messenger.executor": "Run",
+    "Python.rag_processor.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "master",
+    "last_opened_file_path": "/home/home/Projects/AndroAI/app.py",
     "settings.editor.selected.configurable": "preferences.pluginManager"
   }
 }]]></component>
@@ -89,7 +96,15 @@
       <option name="project" value="LOCAL" />
       <updated>1742649239987</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Rag Messenger">
+      <option name="closed" value="true" />
+      <created>1742709679360</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1742709679360</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
