@@ -145,11 +145,15 @@ class ChatWindow(QMainWindow):
         self.input_field.setFocus()
 
         self.consulter = DBConstructor()
-        self.data = self.consulter.faiss_loader("DB_Main_multilingual-e5-large")
+        self.data = self.consulter.faiss_loader("DB_01_Slides_Vect_text-embedding-3-large")
+
         self._update_prompt()
         if self.data["success"]:
-            self._add_message("Система", f"База загрузилась.", BOT_STYLE)
             self.db = self.data["db"]
+            for i, doc in enumerate(self.db.docstore._dict.values()):
+                print(f"Документ {i}: {doc.page_content[:50]}...")
+
+            self._add_message("Система", f"База загрузилась. Всего векторов в индексе: {self.db.index.ntotal}", BOT_STYLE)
             self.e5 = self.data["is_e5_model"]
 
     @staticmethod
@@ -245,8 +249,6 @@ class ChatWindow(QMainWindow):
             self._scroll_to_bottom()
             self.generate_answer(self.query)
 
-    def _send_rag_message(self):
-        pass
 
     def _add_message(self, sender, text, style):
         cursor = self.chat_history.textCursor()
@@ -260,14 +262,14 @@ class ChatWindow(QMainWindow):
         user = query
         return system, user
 
-    @threaded
+    # @threaded
     def generate_answer(self, query: str):
         system, user_template = self.prompt_manager.get_current_prompt()
-        found_chunks = self.db.similarity_search(f"query: {query}" if self.data["is_e5_model"] else query, k=3)
+        found_chunks = self.db.similarity_search(f"query: {query}" if self.data["is_e5_model"] else query, k=10)
         context = ''.join([f"Фрагмент {n}:\n{chunk.page_content if not self.data['is_e5_model'] else re.sub('passage: ', '', chunk.page_content)}\n" for n, chunk in enumerate(found_chunks)])
         user = user_template.format(query=query, context=context)
-        code, answer = self.consulter.request_to_openai(system, user, 0.3)
-        self._add_message("RAG", answer, BOT_STYLE)
+        # code, answer = self.consulter.request_to_openai(system, user, 0.3, True)
+        self._add_message("RAG", context, BOT_STYLE)
         # Передаем system и user_prompt в модель
 
     def _clear_chat(self):
