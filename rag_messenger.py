@@ -201,7 +201,6 @@ class ChatWindow(QMainWindow):
         self.consulter = DBConstructor()
         self.data = self.consulter.faiss_loader("DB_Main_multilingual-e5-large")
 
-
         if self.data["success"]:
             self.db = self.data["db"]
             self.dialog = Dialog(self.prompt_manager, self.db, self.data["is_e5_model"])
