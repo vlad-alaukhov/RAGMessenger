@@ -1,12 +1,11 @@
 import sys
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTextEdit, QPushButton,
-                             QVBoxLayout, QHBoxLayout, QScrollArea, QDialog, QLabel, QComboBox, QDialogButtonBox, QMenuBar)
-from PyQt6.QtCore import Qt, QObject, pyqtSignal
+                             QVBoxLayout, QHBoxLayout, QScrollArea, QDialog, QLabel, QComboBox, QDialogButtonBox)
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QTimer
 from PyQt6.QtGui import QTextCursor, QKeySequence, QShortcut
 import yaml
 from rag_processor import *
 import threading
-import queue
 from queue import Queue
 from functools import wraps
 
@@ -98,6 +97,59 @@ class CustomTextEdit(QTextEdit):
         else:
             super().keyPressEvent(event)
 
+class Dialog(RAGProcessor):
+    def __init__(self, prompt_manager: PromptManager, db, is_e5: bool):
+        super().__init__()
+        self.prompt_manager = prompt_manager
+        self.db = db
+        self.is_e5 = is_e5
+        self.summary = None
+        self.consulter = DBConstructor()
+
+    @staticmethod
+    def threaded(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            result_queue = Queue()
+
+            def thread_worker():
+                try:
+                    result = func(*args, **kwargs)
+                    result_queue.put(result)
+                except Exception as e:
+                    result_queue.put(f"ERROR: {str(e)}")
+
+            threading.Thread(target=thread_worker, daemon=True).start()
+            return result_queue
+
+        return wrapper
+
+    @threaded
+    def generate_answer(self, query: str, quest_hist: list):
+        system, user_template = self.prompt_manager.get_current_prompt() # считал промпт в кортеж.
+        found_chunks = self.db.similarity_search(f"query: {query}" if self.is_e5 else query, k=5) # Нашел 5 соответствующих отрезков
+        context = ''.join([
+            f"Фрагмент {n}:\n{chunk.page_content if not self.is_e5 else re.sub('passage: ', '', chunk.page_content)}\n"
+            for n, chunk in enumerate(found_chunks)
+        ]) # Собрал отрезки в строку
+        if len(quest_hist) > 0:
+            self.summary = f"Краткое содержание диалога: {self.summarizator([quest + ' ' + (ans if ans else None) for quest, ans in quest_hist])}"
+            print(self.summary)
+        user = user_template.format(summary=self.summary, query=query, context=context) # Собрал user по шаблону из саммари, вопроса и отрезков БЗ
+        code, answer = self.consulter.request_to_openai(system, user, 0.3, True)
+
+        if code: quest_hist.append((query, answer))
+
+        return answer
+
+    def summarizator(self, dialog: list):
+        system = """Ты - третья сторона в диалоге. Твоя задача запомнить диалог и выделить из него самую суть.
+        Если есть существенные детали, учти их."""
+        user = f"Внимательно прочитай диалог, передай краткое содержание. Вот диалог: {' '.join(dialog)}. "
+
+        print("Summarizator: ", user)
+        code, summary = self.consulter.request_to_openai(system, user, 0, True)
+        return summary if code else None
 
 class ChatWindow(QMainWindow):
     def __init__(self):
@@ -109,6 +161,7 @@ class ChatWindow(QMainWindow):
         self._setup_ui()
         self._setup_menu()
         self._apply_styles()
+        self.question_history = []
 
 
     def _setup_ui(self):
@@ -143,34 +196,19 @@ class ChatWindow(QMainWindow):
         main_layout.addLayout(input_layout)
 
         self.input_field.setFocus()
+        self._update_prompt()
 
         self.consulter = DBConstructor()
         self.data = self.consulter.faiss_loader("DB_Main_multilingual-e5-large")
 
-        self._update_prompt()
+
         if self.data["success"]:
             self.db = self.data["db"]
-
-            self._add_message("Система", f"База загрузилась. Всего векторов в индексе: {self.db.index.ntotal}", BOT_STYLE)
-            self.e5 = self.data["is_e5_model"]
-
-    @staticmethod
-    def threaded(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            result_queue = Queue()
-
-            def thread_worker():
-                try:
-                    result = func(*args, **kwargs)
-                    result_queue.put(result)
-                except Exception as e:
-                    result_queue.put(f"ERROR: {str(e)}")
-
-            threading.Thread(target=thread_worker, daemon=True).start()
-            return result_queue
-
-        return wrapper
+            self.dialog = Dialog(self.prompt_manager, self.db, self.data["is_e5_model"])
+            self._add_message("Система",
+                              f"База загрузилась. Всего векторов в индексе: {self.db.index.ntotal}",
+                              BOT_STYLE
+                              )
 
     def _update_prompt(self):
         """Обновление текущего промпта"""
@@ -245,8 +283,23 @@ class ChatWindow(QMainWindow):
             self._add_message("Вы", self.query, USER_STYLE)
             self.input_field.clear()
             self._scroll_to_bottom()
-            self.generate_answer(self.query)
 
+            # Запускаем генерацию через Dialog
+            result_queue = self.dialog.generate_answer(self.query, self.question_history)
+            self._handle_generation_result(result_queue)
+
+    def _handle_generation_result(self, result_queue):
+        def check_result():
+            if result_queue.empty():
+                QTimer.singleShot(100, check_result)
+            else:
+                answer = result_queue.get()
+                if not answer.startswith("ERROR"):
+                    self._add_message("RAG", answer, BOT_STYLE)
+                else:
+                    self._add_message("Система", f"Ошибка генерации: {answer[7:]}", BOT_STYLE)
+
+        check_result()
 
     def _add_message(self, sender, text, style):
         cursor = self.chat_history.textCursor()
@@ -259,16 +312,6 @@ class ChatWindow(QMainWindow):
     def make_prompt(self, system: str, query: str):
         user = query
         return system, user
-
-    @threaded
-    def generate_answer(self, query: str):
-        system, user_template = self.prompt_manager.get_current_prompt()
-        found_chunks = self.db.similarity_search(f"query: {query}" if self.data["is_e5_model"] else query, k=5)
-        context = ''.join([f"Фрагмент {n}:\n{chunk.page_content if not self.data['is_e5_model'] else re.sub('passage: ', '', chunk.page_content)}\n" for n, chunk in enumerate(found_chunks)])
-        user = user_template.format(query=query, context=context)
-        code, answer = self.consulter.request_to_openai(system, user, 0.3, True)
-        self._add_message("RAG", answer, BOT_STYLE)
-        # Передаем system и user_prompt в модель
 
     def _clear_chat(self):
         self.chat_history.clear()
@@ -288,7 +331,6 @@ class ChatWindow(QMainWindow):
                     </div>
                 </div>
         """)
-
 
 class SettingsDialog(QDialog):
     def __init__(self, prompt_manager: PromptManager, parent=None):
