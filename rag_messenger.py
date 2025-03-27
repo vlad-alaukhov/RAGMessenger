@@ -1,6 +1,7 @@
 import sys
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTextEdit, QPushButton,
-                             QVBoxLayout, QHBoxLayout, QScrollArea, QDialog, QLabel, QComboBox, QDialogButtonBox)
+                             QVBoxLayout, QHBoxLayout, QScrollArea, QDialog, QLabel, QComboBox, QDialogButtonBox,
+                             QFileDialog, QMessageBox)
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QTimer
 from PyQt6.QtGui import QTextCursor, QKeySequence, QShortcut
 import yaml
@@ -162,7 +163,13 @@ class ChatWindow(QMainWindow):
         self._setup_menu()
         self._apply_styles()
         self.question_history = []
-
+        # Инициализация базы (как было)
+        self.consulter = DBConstructor()
+        self.db = None  # Пока база не загружена
+        self.is_e5 = False
+        self.dialog = None
+        self._load_database("DB_Main_multilingual-e5-large")  # Переносим в отдельный метод
+        self.current_emb_model = None
 
     def _setup_ui(self):
         central_widget = QWidget()
@@ -198,16 +205,32 @@ class ChatWindow(QMainWindow):
         self.input_field.setFocus()
         self._update_prompt()
 
-        self.consulter = DBConstructor()
-        self.data = self.consulter.faiss_loader("DB_Main_multilingual-e5-large")
+    def _load_database(self, folder: str):
+        """Загрузка/перезагрузка базы знаний"""
+        self.data = self.consulter.faiss_loader(folder)
+        s, meta = self.consulter.metadata_loader(folder)
+        self.current_emb_model = meta['embedding_model']
 
         if self.data["success"]:
             self.db = self.data["db"]
-            self.dialog = Dialog(self.prompt_manager, self.db, self.data["is_e5_model"])
-            self._add_message("Система",
-                              f"База загрузилась. Всего векторов в индексе: {self.db.index.ntotal}",
-                              BOT_STYLE
-                              )
+            self.is_e5 = self.data["is_e5_model"]
+
+            # Инициализация/переинициализация Dialog
+            if self.dialog:
+                self.dialog.db = self.db
+                self.dialog.is_e5 = self.is_e5
+            else:
+                self.dialog = Dialog(self.prompt_manager, self.db, self.is_e5)
+
+            self._add_message("Система", f"База {folder} загружена! Векторов: {self.db.index.ntotal}, Модель эмбеддингов: {meta['embedding_model']}", BOT_STYLE)
+        else:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки базы:\n{self.data['error']}")
+            self.db = None
+            self.dialog = None
+
+    def load_new_database(self, folder: str):
+        """Вызывается из SettingsDialog при смене базы"""
+        self._load_database(folder)
 
     def _update_prompt(self):
         """Обновление текущего промпта"""
@@ -230,14 +253,13 @@ class ChatWindow(QMainWindow):
         file_menu.addAction("Выход", self.close)
 
     def _open_settings(self):
-        dialog = SettingsDialog(self.prompt_manager, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        setts_dialog = SettingsDialog(self.prompt_manager, self)
+        if setts_dialog.exec() == QDialog.DialogCode.Accepted:
             # Обновляем текущий промпт через менеджер
-            self.prompt_manager.set_current_prompt(dialog.prompt_combo.currentText())
+            self.prompt_manager.set_current_prompt(setts_dialog.prompt_combo.currentText())
 
-            self.current_mode = dialog.mode_combo.currentText()
-            self.current_emb_model = dialog.emb_combo.currentText()
-            self.current_llm_model = dialog.llm_combo.currentText()
+            self.current_mode = setts_dialog.mode_combo.currentText()
+            self.current_llm_model = setts_dialog.llm_combo.currentText()
 
             # Выводим новые настройки для отладки
             system, user = self.prompt_manager.get_current_prompt()
@@ -246,7 +268,7 @@ class ChatWindow(QMainWindow):
             print(f"• Текущий промпт: {self.prompt_manager.current_prompt_name}")
             print(f"• System prompt: {system[:50]}...")  # Выводим начало промпта для наглядности
             print(f"• User prompt: {user[:50]}...")
-            print(f"• Модель эмбеддингов: {self.current_emb_model}")
+            print(f"• База FAISS: {self.current_emb_model}")
             print(f"• Модель генерации: {self.current_llm_model}\n")
 
             # Принудительное обновление интерфейса (опционально)
@@ -293,6 +315,7 @@ class ChatWindow(QMainWindow):
                 QTimer.singleShot(100, check_result)
             else:
                 answer = result_queue.get()
+
                 if not answer.startswith("ERROR"):
                     self._add_message("RAG", answer, BOT_STYLE)
                 else:
@@ -308,10 +331,6 @@ class ChatWindow(QMainWindow):
         cursor.insertHtml(html)
         self.chat_history.setTextCursor(cursor)
 
-    def make_prompt(self, system: str, query: str):
-        user = query
-        return system, user
-
     def _clear_chat(self):
         self.chat_history.clear()
 
@@ -326,7 +345,7 @@ class ChatWindow(QMainWindow):
                         <b>Текущий режим:</b> {self.current_mode}<br>
                         <b>Промпт:</b> {self.prompt_manager.current_prompt_name}<br>
                         <b>Эмбеддинги:</b> {self.current_emb_model}<br>
-                        <b>Генерация:</b> {self.current_llm_model}
+                        <b>Генерация:</b> {self.current_llm_model}<br><br>
                     </div>
                 </div>
         """)
@@ -336,6 +355,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.prompt_manager = prompt_manager
         self.setWindowTitle("Настройки RAG")
+        self.db_folder = None  # Будем хранить выбранную папку
         self._setup_ui()
 
     def _setup_ui(self):
@@ -354,15 +374,12 @@ class SettingsDialog(QDialog):
         self.prompt_combo.setCurrentText(self.prompt_manager.current_prompt_name)
         layout.addWidget(self.prompt_combo)
 
-        # Модели эмбеддингов
-        layout.addWidget(QLabel("Модель эмбеддингов:"))
-        self.emb_combo = QComboBox()
-        self.emb_combo.addItems([
-            "intfloat/multilingual-e5-large",
-            "intfloat/multilingual-e5-base",
-            "text-embedding-3-large",
-        ])
-        layout.addWidget(self.emb_combo)
+        # Выбор папки для базы знаний
+        layout.addWidget(QLabel("База FAISS:"))
+
+        self.db_btn = QPushButton("Выбрать папку с базой...")
+        self.db_btn.clicked.connect(self._select_db_folder)
+        layout.addWidget(self.db_btn)
 
         # Модели LLM
         layout.addWidget(QLabel("Модель генерации:"))
@@ -379,10 +396,29 @@ class SettingsDialog(QDialog):
         self.btn_box.rejected.connect(self.reject)
         layout.addWidget(self.btn_box)
 
-    def _update_emb_models(self):
-        self.emb_model_combo.clear()
-        provider = self.emb_provider_combo.currentText()
-        self.emb_model_combo.addItems(self.emb_models[provider])
+    def _select_db_folder(self):
+        """Выбор папки с базой FAISS"""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите папку с базой FAISS",
+            "",
+            QFileDialog.Option.ShowDirsOnly
+        )
+
+        if folder:
+            # Проверка валидности папки
+            if self._validate_db_folder(folder):
+                self.db_folder = folder
+                QMessageBox.information(self, "Успешно", "База успешно выбрана")
+            else:
+                QMessageBox.warning(self, "Ошибка", "Папка не содержит валидную базу FAISS")
+
+    @staticmethod
+    def _validate_db_folder(path: str) -> bool:
+        """Проверка структуры папки с базой"""
+        required = {'index.faiss', 'index.pkl', 'metadata.json'}
+        files = set(os.listdir(path))
+        return required.issubset(files)
 
     def _update_llm_models(self):
         self.llm_model_combo.clear()
@@ -392,6 +428,9 @@ class SettingsDialog(QDialog):
     def _save_settings(self):
         """Сохранение выбранных настроек"""
         self.prompt_manager.set_current_prompt(self.prompt_combo.currentText())
+        # Передаем выбранную папку в главное окно
+        if self.db_folder:
+            self.parent().load_new_database(self.db_folder)
         self.accept()
 
 if __name__ == "__main__":
