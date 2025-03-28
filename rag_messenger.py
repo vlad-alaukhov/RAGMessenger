@@ -99,11 +99,12 @@ class CustomTextEdit(QTextEdit):
             super().keyPressEvent(event)
 
 class Dialog(RAGProcessor):
-    def __init__(self, prompt_manager: PromptManager, db, is_e5: bool):
+    def __init__(self, prompt_manager: PromptManager, llm, db, is_e5: bool):
         super().__init__()
         self.prompt_manager = prompt_manager
         self.db = db
         self.is_e5 = is_e5
+        self.llm = llm
         self.summary = None
         self.consulter = DBConstructor()
 
@@ -137,7 +138,7 @@ class Dialog(RAGProcessor):
             self.summary = f"Краткое содержание диалога: {self.summarizator([quest + ' ' + (ans if ans else None) for quest, ans in quest_hist])}"
             print(self.summary)
         user = user_template.format(summary=self.summary, query=query, context=context) # Собрал user по шаблону из саммари, вопроса и отрезков БЗ
-        code, answer = self.consulter.request_to_openai(system, user, 0.3, True)
+        code, answer = self.consulter.request_to_openai(system, user, 0.3, self.llm, True)
 
         if code: quest_hist.append((query, answer))
 
@@ -149,7 +150,7 @@ class Dialog(RAGProcessor):
         user = f"Внимательно прочитай диалог, передай краткое содержание. Вот диалог: {' '.join(dialog)}. "
 
         print("Summarizator: ", user)
-        code, summary = self.consulter.request_to_openai(system, user, 0, True)
+        code, summary = self.consulter.request_to_openai(system, user, 0, self.llm, True)
         return summary if code else None
 
 class ChatWindow(QMainWindow):
@@ -168,8 +169,11 @@ class ChatWindow(QMainWindow):
         self.db = None  # Пока база не загружена
         self.is_e5 = False
         self.dialog = None
-        self._load_database("DB_Main_multilingual-e5-large")  # Переносим в отдельный метод
         self.current_emb_model = None
+        self.current_mode = "Диалоговый"
+        self.current_llm = "openai/gpt-4o-mini"
+        loaded = self._load_database("DB_Main_multilingual-e5-large")  # Переносим в отдельный метод
+        if loaded: self._update_chat_headers()
 
     def _setup_ui(self):
         central_widget = QWidget()
@@ -220,13 +224,16 @@ class ChatWindow(QMainWindow):
                 self.dialog.db = self.db
                 self.dialog.is_e5 = self.is_e5
             else:
-                self.dialog = Dialog(self.prompt_manager, self.db, self.is_e5)
+                self.dialog = Dialog(self.prompt_manager, self.current_llm, self.db, self.is_e5)
+                print(f"Текущая LLM заменена на {self.current_llm}")
 
-            self._add_message("Система", f"База {folder} загружена! Векторов: {self.db.index.ntotal}, Модель эмбеддингов: {meta['embedding_model']}", BOT_STYLE)
+            return True
         else:
-            QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки базы:\n{self.data['error']}")
+            # QMessageBox.critical(self, "Ошибка", f"Ошибка загрузки базы:\n{self.data['error']}")
+            self._add_message("Ошибка", f"Ошибка загрузки базы:\n{self.data['error']}", BOT_STYLE)
             self.db = None
             self.dialog = None
+            return False
 
     def load_new_database(self, folder: str):
         """Вызывается из SettingsDialog при смене базы"""
@@ -253,13 +260,13 @@ class ChatWindow(QMainWindow):
         file_menu.addAction("Выход", self.close)
 
     def _open_settings(self):
-        setts_dialog = SettingsDialog(self.prompt_manager, self)
+        setts_dialog = SettingsDialog(self.prompt_manager, self.dialog, self)
         if setts_dialog.exec() == QDialog.DialogCode.Accepted:
             # Обновляем текущий промпт через менеджер
             self.prompt_manager.set_current_prompt(setts_dialog.prompt_combo.currentText())
 
             self.current_mode = setts_dialog.mode_combo.currentText()
-            self.current_llm_model = setts_dialog.llm_combo.currentText()
+            self.current_llm = setts_dialog.llm_combo.currentText()
 
             # Выводим новые настройки для отладки
             system, user = self.prompt_manager.get_current_prompt()
@@ -269,7 +276,7 @@ class ChatWindow(QMainWindow):
             print(f"• System prompt: {system[:50]}...")  # Выводим начало промпта для наглядности
             print(f"• User prompt: {user[:50]}...")
             print(f"• База FAISS: {self.current_emb_model}")
-            print(f"• Модель генерации: {self.current_llm_model}\n")
+            print(f"• Модель генерации: {self.current_llm}\n")
 
             # Принудительное обновление интерфейса (опционально)
             self._update_chat_headers()
@@ -317,7 +324,7 @@ class ChatWindow(QMainWindow):
                 answer = result_queue.get()
 
                 if not answer.startswith("ERROR"):
-                    self._add_message("RAG", answer, BOT_STYLE)
+                    self._add_message(f"RAG {self.current_llm.split('/')[-1]}", answer, BOT_STYLE)
                 else:
                     self._add_message("Система", f"Ошибка генерации: {answer[7:]}", BOT_STYLE)
 
@@ -345,15 +352,16 @@ class ChatWindow(QMainWindow):
                         <b>Текущий режим:</b> {self.current_mode}<br>
                         <b>Промпт:</b> {self.prompt_manager.current_prompt_name}<br>
                         <b>Эмбеддинги:</b> {self.current_emb_model}<br>
-                        <b>Генерация:</b> {self.current_llm_model}<br><br>
+                        <b>Генерация:</b> {self.current_llm}<br><br>
                     </div>
                 </div>
         """)
 
 class SettingsDialog(QDialog):
-    def __init__(self, prompt_manager: PromptManager, parent=None):
+    def __init__(self, prompt_manager: PromptManager, dialog: Dialog, parent=None):
         super().__init__(parent)
         self.prompt_manager = prompt_manager
+        self.dialog = dialog
         self.setWindowTitle("Настройки RAG")
         self.db_folder = None  # Будем хранить выбранную папку
         self._setup_ui()
@@ -385,8 +393,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(QLabel("Модель генерации:"))
         self.llm_combo = QComboBox()
         self.llm_combo.addItems([
-            "gpt-4o-mini",
-            "command-r7b-12-2024"
+            "openai/gpt-4o-mini",
+            "cohere/command-r7b-12-2024"
         ])
         layout.addWidget(self.llm_combo)
 
@@ -420,17 +428,15 @@ class SettingsDialog(QDialog):
         files = set(os.listdir(path))
         return required.issubset(files)
 
-    def _update_llm_models(self):
-        self.llm_model_combo.clear()
-        provider = self.llm_provider_combo.currentText()
-        self.llm_model_combo.addItems(self.llm_models[provider])
-
     def _save_settings(self):
         """Сохранение выбранных настроек"""
         self.prompt_manager.set_current_prompt(self.prompt_combo.currentText())
         # Передаем выбранную папку в главное окно
         if self.db_folder:
-            self.parent().load_new_database(self.db_folder)
+            self.parent.load_new_database(self.db_folder)
+
+        self.dialog.llm = self.llm_combo.currentText()
+
         self.accept()
 
 if __name__ == "__main__":
