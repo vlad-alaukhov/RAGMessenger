@@ -1,0 +1,8 @@
+{
+  "embedding_model": "sergeyzh/LaBSE-ru-turbo",
+  "model_type": "huggingface",
+  "dimension": 768,
+  "normalized": false,
+  "distance_strategy": "L2",
+  "is_e5_model": false
+}

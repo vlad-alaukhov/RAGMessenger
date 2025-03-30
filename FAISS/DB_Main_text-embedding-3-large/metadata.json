@@ -1,0 +1,8 @@
+{
+  "embedding_model": "text-embedding-3-large",
+  "model_type": "openai",
+  "dimension": 3072,
+  "normalized": false,
+  "distance_strategy": "COSINE",
+  "is_e5_model": false
+}
