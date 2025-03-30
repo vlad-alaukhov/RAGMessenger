@@ -4,7 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2bab6b68-6783-46c9-a5ca-4dd97c44bf02" name="Changes" comment="Добавил выбор FAISS базы для тестирования" />
+    <list default="true" id="2bab6b68-6783-46c9-a5ca-4dd97c44bf02" name="Changes" comment="Добавил выбор LLM">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/rag_messenger.py" beforeDir="false" afterPath="$PROJECT_DIR$/rag_messenger.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -166,14 +169,34 @@
       <option name="project" value="LOCAL" />
       <updated>1743081057938</updated>
     </task>
-    <option name="localTasksCounter" value="13" />
+    <task id="LOCAL-00013" summary="Добавил выбор FAISS базы для тестирования">
+      <option name="closed" value="true" />
+      <created>1743156045365</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1743156045373</updated>
+    </task>
+    <option name="localTasksCounter" value="14" />
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Rag Messenger" />
     <MESSAGE value="Rag Messenger заговорил" />
     <MESSAGE value="Добавил саммаризацию диалога" />
     <MESSAGE value="Добавил выбор FAISS базы для тестирования" />
-    <option name="LAST_COMMIT_MESSAGE" value="Добавил выбор FAISS базы для тестирования" />
+    <MESSAGE value="Добавил выбор LLM" />
+    <option name="LAST_COMMIT_MESSAGE" value="Добавил выбор LLM" />
   </component>
 </project>

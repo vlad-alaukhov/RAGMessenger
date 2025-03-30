@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QTextEdit, QPushButton,
                              QVBoxLayout, QHBoxLayout, QScrollArea, QDialog, QLabel, QComboBox, QDialogButtonBox,
-                             QFileDialog, QMessageBox)
+                             QFileDialog, QMessageBox, QDoubleSpinBox, QSlider)
 from PyQt6.QtCore import Qt, QObject, pyqtSignal, QTimer
 from PyQt6.QtGui import QTextCursor, QKeySequence, QShortcut
 import yaml
@@ -105,6 +105,7 @@ class Dialog(RAGProcessor):
         self.db = db
         self.is_e5 = is_e5
         self.llm = llm
+        self.temperature = 0.3
         self.summary = None
         self.consulter = DBConstructor()
 
@@ -138,7 +139,7 @@ class Dialog(RAGProcessor):
             self.summary = f"Краткое содержание диалога: {self.summarizator([quest + ' ' + (ans if ans else None) for quest, ans in quest_hist])}"
             print(self.summary)
         user = user_template.format(summary=self.summary, query=query, context=context) # Собрал user по шаблону из саммари, вопроса и отрезков БЗ
-        code, answer = self.consulter.request_to_openai(system, user, 0.3, self.llm, True)
+        code, answer = self.consulter.request_to_openai(system, user, self.temperature, self.llm, True)
 
         if code: quest_hist.append((query, answer))
 
@@ -172,7 +173,8 @@ class ChatWindow(QMainWindow):
         self.current_emb_model = None
         self.current_mode = "Диалоговый"
         self.current_llm = "openai/gpt-4o-mini"
-        loaded = self._load_database("DB_Main_multilingual-e5-large")  # Переносим в отдельный метод
+        self.current_database = "DB_Main_multilingual-e5-large"
+        loaded = self._load_database(self.current_database)  # Переносим в отдельный метод
         if loaded: self._update_chat_headers()
 
     def _setup_ui(self):
@@ -352,7 +354,8 @@ class ChatWindow(QMainWindow):
                         <b>Текущий режим:</b> {self.current_mode}<br>
                         <b>Промпт:</b> {self.prompt_manager.current_prompt_name}<br>
                         <b>Эмбеддинги:</b> {self.current_emb_model}<br>
-                        <b>Генерация:</b> {self.current_llm}<br><br>
+                        <b>Генерация:</b> {self.current_llm}<br>
+                        <b>Температура:</b> {self.dialog.temperature if self.dialog else 0.3}<br><br>
                     </div>
                 </div>
         """)
@@ -398,6 +401,31 @@ class SettingsDialog(QDialog):
         ])
         layout.addWidget(self.llm_combo)
 
+        # Добавляем элементы для температуры
+        layout.addWidget(QLabel("Температура генерации:"))
+
+        self.temp_slider = QSlider(Qt.Orientation.Horizontal)
+        self.temp_slider.setRange(0, 10)
+        self.temp_slider.setValue(3)
+
+        self.temp_spin = QDoubleSpinBox()
+        self.temp_spin.setRange(0.0, 1.0)
+        self.temp_spin.setSingleStep(0.1)
+        self.temp_spin.setValue(0.3)
+
+        # Связываем слайдер и спинбокс
+        self.temp_slider.valueChanged.connect(
+            lambda: self.temp_spin.setValue(self.temp_slider.value() / 10)
+        )
+        self.temp_spin.valueChanged.connect(
+            lambda: self.temp_slider.setValue(int(self.temp_spin.value() * 10))
+        )
+
+        temp_layout = QHBoxLayout()
+        temp_layout.addWidget(self.temp_slider)
+        temp_layout.addWidget(self.temp_spin)
+        layout.addLayout(temp_layout)
+
         # Кнопки
         self.btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.btn_box.accepted.connect(self._save_settings)
@@ -436,6 +464,7 @@ class SettingsDialog(QDialog):
             self.parent.load_new_database(self.db_folder)
 
         self.dialog.llm = self.llm_combo.currentText()
+        self.dialog.temperature = self.temp_spin.value()
 
         self.accept()
 
