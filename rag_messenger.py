@@ -173,8 +173,7 @@ class ChatWindow(QMainWindow):
         self.current_emb_model = None
         self.current_mode = "Диалоговый"
         self.current_llm = "openai/gpt-4o-mini"
-        self.current_database = "DB_Main_multilingual-e5-large"
-        loaded = self._load_database(self.current_database)  # Переносим в отдельный метод
+        loaded = self._load_database("DB_Main_multilingual-e5-large")  # Переносим в отдельный метод
         if loaded: self._update_chat_headers()
 
     def _setup_ui(self):
@@ -214,8 +213,10 @@ class ChatWindow(QMainWindow):
     def _load_database(self, folder: str):
         """Загрузка/перезагрузка базы знаний"""
         self.data = self.consulter.faiss_loader(folder)
+        print(self.data)
         s, meta = self.consulter.metadata_loader(folder)
-        self.current_emb_model = meta['embedding_model']
+        if meta: self.current_emb_model = meta['embedding_model']
+        else: print(s)
 
         if self.data["success"]:
             self.db = self.data["db"]
@@ -461,7 +462,9 @@ class SettingsDialog(QDialog):
         self.prompt_manager.set_current_prompt(self.prompt_combo.currentText())
         # Передаем выбранную папку в главное окно
         if self.db_folder:
-            self.parent.load_new_database(self.db_folder)
+            folder = self.db_folder
+            print(folder)
+            self.parent.load_new_database(folder)
 
         self.dialog.llm = self.llm_combo.currentText()
         self.dialog.temperature = self.temp_spin.value()
